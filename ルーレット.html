@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>ルーレット</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+
+  <style>
+      #backImage {
+          position: fixed;
+          width: 100vw;
+          height: 100vh;
+          top: -50px;
+          left: 140px;
+          background-image: url(ルーレット背景.jpg);
+          background-size: cover;
+          background-position: left;
+          background-repeat: no-repeat;
+          filter: opacity(95%) contrast(50%) blur(3px) brightness(120%);
+          z-index: -1;
+          transform: scale(1.3);
+      }
+
+      body {font-family: "Google Sans",Roboto,RobotoDraft,Helvetica,Arial,sans-serif}
+
+      canvas {
+          margin: auto;
+          padding: 0;
+          width: 90%;
+          min-width: 200px;
+          max-width: 400px;
+          height: auto;
+      }
+
+      .roulette-area {text-align: center;}
+
+      .hidden {display: none;}
+
+      .scroll-area {
+          max-height: 60vh;
+          overflow: auto;
+      }
+
+      #start {
+          font-size: 2em;
+          padding-left: 1em;
+          padding-right: 1em;
+      }
+
+      #list li {
+          width: 100%;
+          word-wrap: break-word;
+          margin: 4px 0 4px 0;
+      }
+
+      #list li a {
+          float: right;
+          color: gray;
+          text-decoration: none;
+      }
+
+      #result {
+          position: fixed;
+          top: 25%;
+          left: 25%;
+          width: 40%;
+          /*!*height: 40%;*!*/
+          border-radius: 0.5em;
+          background: white;
+          text-align: center;
+          font-size: 2rem;
+          word-wrap: break-word;
+          z-index: 9999;
+      }
+
+      #selectedItem {
+          font-size: 6rem;
+      }
+  </style>
+</head>
+
+<body>
+
+<div id="backImage"></div>
+
+<!--<nav class="navbar" role="navigation" aria-label="main navigation"></nav>-->
+
+<div id="result" class="hidden box">
+  <label>当選番号</label>
+  <div id="selectedItem" class="my-6"></div>
+  <button id="close" class="button is-info">OK</button>
+</div>
+
+
+<div class="columns mt-6">
+  <div class="column"></div>
+  <div class="column is-6 roulette-area">
+    <canvas id="canvas"></canvas>
+    <div class="mt-4">
+      <button id="start" class="button is-info">START</button>
+      <audio id="drumroll" src="ドラムロールの音.mp3" class="hidden"></audio>
+    </div>
+  </div>
+  <div class="column mr-6">
+    <label for="item">抽選番号</label>
+    <textarea class="textarea" id="item" rows="20"></textarea>
+
+    <div class="scroll-area" style="display: none">
+      <ul id="list"></ul>
+    </div>
+  </div>
+</div>
+
+<!--<div class="footer"></div>-->
+
+<script>
+    class Animation {
+        constructor(callback) {
+            this.callback = callback;
+        }
+
+        run() {
+            const func = (ts) => {
+                this.callback(ts);
+                window.requestAnimationFrame((ts) => func(ts));
+            };
+            window.requestAnimationFrame((ts) => func(ts));
+        }
+    }
+
+    class ColorGenerator {
+        static getColors(num) {
+            let colors = [];
+            for (let i = 0; i < num; i++) {
+                const hue = i * 360 / num;
+                colors[i] = `hsl(${hue},90%,50%)`;
+            }
+
+            return colors;
+        }
+    }
+
+    class List {
+        constructor() {
+            this.listReceiver = null;
+            this.tagItem = document.getElementById('item');
+            this.tagList = document.getElementById('list');
+
+            this.tagItem.addEventListener('keyup', (event) => {
+                this._clearItem();
+
+                const items = this.tagItem.value.split(/\n/);
+                const uniqueItems = Array.from(new Set(items));
+                this.shuffleArray(uniqueItems).forEach((text) => {
+                    if (text === "") return;
+                    this._addItem(text);
+                });
+
+                event.preventDefault();
+                return false;
+            });
+        }
+
+        init() {
+            this.tagItem.value = "1\n2\n3"
+            this._addItem('1');
+            this._addItem('2');
+            this._addItem('3');
+        }
+
+        isEmpty() {
+            return this.tagList.children.length == 0;
+        }
+
+        /**
+         * 配列の要素の値を変更せずに要素の順番を並べ替える関数
+         * (e.g) [0,1,2,3,4] => [1,3,2,0,4]
+         */
+        shuffleArray(array) {
+            const cloneArray = [...array]
+
+            for (let i = cloneArray.length - 1; i >= 0; i--) {
+                let rand = Math.floor(Math.random() * (i + 1))
+                // 配列の要素の順番を入れ替える
+                let tmpStorage = cloneArray[i]
+                cloneArray[i] = cloneArray[rand]
+                cloneArray[rand] = tmpStorage
+            }
+
+            return cloneArray
+        }
+
+        _addItem(text) {
+            const newListItem = document.createElement('li');
+            const itemText = document.createElement('span');
+            itemText.innerText = text;
+
+            const removeButton = document.createElement('a');
+            removeButton.innerHTML = '&#x2716;';
+            removeButton.href = '#';
+            removeButton.addEventListener('click', (event) => {
+                event.target.parentNode.remove();
+                this.listReceiver.setList(this._makeList());
+
+                event.preventDefault();
+
+                return false;
+            });
+
+            newListItem.appendChild(itemText);
+            newListItem.appendChild(removeButton);
+            this.tagList.appendChild(newListItem);
+
+            this.listReceiver.setList(this._makeList());
+        }
+
+        _clearItem() {
+            while (this.tagList.firstChild) {
+                this.tagList.removeChild(this.tagList.firstChild);
+            }
+            this.listReceiver.setList([]);
+        }
+
+        _makeList() {
+            const list = [];
+            Array.from(this.tagList.children).forEach((child) => {
+                list.push(child.children[0].innerText);
+            })
+            return list;
+        }
+    }
+
+    class Roulette {
+        constructor(args) {
+            this.x = args.x;
+            this.y = args.y;
+            this.radius = args.radius;
+            this.list = args.list;   // [string] ルーレットの選択肢
+            this.onStop = args.onStop;  // ルーレット停止時の処理
+
+            this.angle = 0;
+            this.arcDegree = 0;
+            this.velocity = 0;
+            this.acceleration = 0;
+            this.deceleration = -0.075;
+            this.entropyMode = true;
+            this.entropies = [];
+        }
+
+        setList(list) {
+            this.list = list;
+            this.entropies = [];
+            this.list.forEach(() => {
+                this.entropies.push(1)
+            })
+        }
+
+        start() {
+            if (this.velocity == 0) {
+                this.removeLastItem();
+
+                this.velocity = 15;
+                this.decelerationPoint = Math.random() * 360;
+            }
+            document.getElementById("drumroll").play();
+        }
+
+        removeLastItem() {
+            if (this.lastSelected == null) return
+
+            this.entropies[this.lastSelected] = 0;
+
+            if (this.entropies.reduce((previousValue, currentValue) => previousValue + currentValue) === 0) {
+                for (let i = 0; i < this.entropies.length; i++) {
+                    this.entropies[i] = 1;
+                }
+            }
+
+            const items = document.getElementById('item').value.split(/\n/);
+            items.splice(this.lastSelected, 1);
+            document.getElementById('item').value = items.join("\n");
+
+            this.lastSelected = null;
+        }
+
+        do() {
+            if (this.list.length == 0) {
+                this.velocity = 0;
+                this.acceleration = 0;
+                return;
+            }
+
+            if (this.velocity <= 0) return;
+
+            if (this.acceleration == 0) {
+                if (this.decelerationPoint + 10 < 360) {
+                    if ((this.decelerationPoint <= this.arcDegree) && (this.arcDegree < this.decelerationPoint + 10)) {
+                        this.acceleration = this.deceleration;
+                        this.arcDegree += (this.decelerationPoint % 10) + parseFloat("0." + (String(this.decelerationPoint)).split(".")[1]);
+                    }
+                }
+                else if ((this.decelerationPoint <= this.arcDegree) || (this.arcDegree < this.decelerationPoint - 350)) {
+                    this.acceleration = this.deceleration;
+                    this.arcDegree += (this.decelerationPoint % 10) + parseFloat("0." + (String(this.decelerationPoint)).split(".")[1]);
+                }
+            }
+
+            this.velocity += this.acceleration;
+            if (this.velocity <= 8) {
+                if (this.acceleration < -0.01) this.acceleration += this.velocity / 30000
+            }
+            if (this.velocity <= 0) {
+                this.velocity = 0;
+                this.acceleration = 0;
+                this._onStop();
+            }
+
+            this._rotate();
+        }
+
+        draw(canvas) {
+            const ctx = canvas.getContext('2d');
+            let angleBySlice;
+            if (this.list.length) {
+                const sum = this.entropies.reduce((previousValue, currentValue) => previousValue + currentValue);
+                angleBySlice = 2 * Math.PI / sum;
+            }
+            else {
+                angleBySlice = 2 * Math.PI / this.list.length;
+            }
+
+            const colors = ColorGenerator.getColors(this.list.length);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let sliceIndex = 0;
+            for (let i = 0; i < this.list.length; i++) {
+                if (this.entropies[i] == 0) continue;
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle + angleBySlice * sliceIndex);
+
+                ctx.beginPath();
+                ctx.lineTo(this.radius, 0);
+
+                const radius = angleBySlice != 2 * Math.PI ? this.radius :  this.radius - 5
+                ctx.arc(0, 0, radius, 0, angleBySlice);
+
+                ctx.lineTo(0, 0);
+                ctx.fillStyle = colors[i];
+                ctx.fill();
+                ctx.closePath();
+
+                if (angleBySlice != 2 * Math.PI) {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 10;
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
+                }
+
+                ctx.clip();
+
+                ctx.beginPath();
+                ctx.fillStyle = 'white';
+                ctx.textBaseline = 'middle';
+                ctx.rotate(angleBySlice / 2);
+                const text = this.list[i];
+                const maxFontSizeLevel = 4;
+                const baseFontSize = 72 * 3 / maxFontSizeLevel;
+                const length = Math.max(text.length, this.list.length - 3);
+                const fontSize = length <= maxFontSizeLevel ? (baseFontSize * (maxFontSizeLevel - length + 1)) : baseFontSize;
+                ctx.font = `${fontSize}px Meiryo`;
+                const textWidth = ctx.measureText(text).width;
+
+                const x = textWidth < this.radius ? (this.radius - textWidth + 28) / 2 : 28;
+                ctx.fillText(text, x, 0);
+
+                ctx.closePath();
+                ctx.restore();
+
+                sliceIndex++;
+            }
+
+            ctx.beginPath();
+            ctx.fillStyle = 'black';
+            ctx.moveTo(this.x - 20, 2);
+            ctx.lineTo(this.x + 20, 2);
+            ctx.lineTo(this.x, 22);
+            ctx.lineTo(this.x - 20, 2);
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        _rotate() {
+            this.arcDegree = (this.arcDegree + (this.velocity > 10 ? 10 : this.velocity)) % 360;
+            this.angle = this.arcDegree * Math.PI / 180;
+        }
+
+        _onStop() {
+            const sum = this.entropies.reduce((previousValue, currentValue) => previousValue + currentValue);
+            const degreeBySlice = 360 / sum;
+
+            let selected = (Math.floor((360 - ((this.arcDegree + 90) % 360)) / degreeBySlice)) % this.list.length;
+
+            for (let i = 0; i < this.entropies.length; i++) {
+                if (this.entropies[i] == 1) selected--;
+
+                if (selected == -1) {
+                    selected = i;
+                    break;
+                }
+            }
+
+            this.lastSelected = selected;
+
+            this.onStop(this.list[selected]);
+        }
+
+    }
+
+    (() => {
+        const canvas = document.getElementById('canvas');
+        canvas.width = 600;
+        canvas.height = 600;
+
+        const tagResult = document.getElementById('result');
+        const roulette = new Roulette({
+            list: ['1', '2', '3'],
+            x: canvas.width / 2,
+            y: canvas.height / 2 + 20,
+            radius: Math.min(canvas.width, canvas.height) / 2.2,
+            onStop: (selectedItem) => {
+                document.getElementById('selectedItem').innerText = selectedItem;
+                tagResult.classList.remove('hidden');
+            },
+        });
+
+        const startButton = document.getElementById('start');
+        startButton.addEventListener('click', () => {
+            roulette.start();
+            tagResult.classList.add('hidden');
+        });
+        const closeButton = document.getElementById('close');
+        closeButton.addEventListener('click', () => {
+            tagResult.classList.add('hidden');
+        });
+
+        const list = new List();
+        list.listReceiver = roulette;
+        list.init();
+
+        const animation = new Animation((args) => {
+            roulette.do();
+            roulette.draw(canvas);
+        });
+
+        animation.run();
+    })();
+</script>
+</body>
+
+</html>
