@@ -155,10 +155,15 @@
 
                 const items = this.tagItem.value.split(/\n/);
                 const uniqueItems = Array.from(new Set(items));
-                this.shuffleArray(uniqueItems).forEach((text) => {
-                    if (text === "") return;
+                this.tagItem.value = uniqueItems.join("\n")
+                uniqueItems.forEach((text) => {
+                    // if (text === "") return;
                     this._addItem(text);
                 });
+                // this.shuffleArray(uniqueItems).forEach((text) => {
+                //     // if (text === "") return;
+                //     this._addItem(text);
+                // });
 
                 event.preventDefault();
                 return false;
@@ -249,6 +254,8 @@
             this.deceleration = -0.075;
             this.entropyMode = true;
             this.entropies = [];
+
+            this.selectedHistory = [];
         }
 
         setList(list) {
@@ -274,15 +281,18 @@
 
             this.entropies[this.lastSelected] = 0;
 
+            let items = document.getElementById('item').value.split(/\n/);
+            console.log(items)
+            // items.splice(this.lastSelected, 1);
+            items = items.filter(item => !this.selectedHistory.includes(item))
+            document.getElementById('item').value = items.join("\n");
+
             if (this.entropies.reduce((previousValue, currentValue) => previousValue + currentValue) === 0) {
                 for (let i = 0; i < this.entropies.length; i++) {
                     this.entropies[i] = 1;
                 }
+                document.getElementById('item').value = this.list.join("\n");
             }
-
-            const items = document.getElementById('item').value.split(/\n/);
-            items.splice(this.lastSelected, 1);
-            document.getElementById('item').value = items.join("\n");
 
             this.lastSelected = null;
         }
@@ -357,8 +367,8 @@
                 ctx.closePath();
 
                 if (angleBySlice != 2 * Math.PI) {
-                    ctx.strokeStyle = 'white';
-                    ctx.lineWidth = 10;
+                    ctx.strokeStyle = 'lightgray';
+                    ctx.lineWidth = 1;
                     ctx.lineJoin = 'round';
                     ctx.stroke();
                 }
@@ -371,13 +381,15 @@
                 ctx.rotate(angleBySlice / 2);
                 const text = this.list[i];
                 const maxFontSizeLevel = 4;
-                const baseFontSize = 72 * 3 / maxFontSizeLevel;
+                const baseFontSize = 72 * 3 / maxFontSizeLevel / (Math.log10(this.list.length));
                 const length = Math.max(text.length, this.list.length - 3);
+                const maxFontSize = 120;
                 const fontSize = length <= maxFontSizeLevel ? (baseFontSize * (maxFontSizeLevel - length + 1)) : baseFontSize;
-                ctx.font = `${fontSize}px Meiryo`;
+                ctx.font = fontSize <= maxFontSize ? `${fontSize}px Meiryo` : `${maxFontSize}px Meiryo`;
                 const textWidth = ctx.measureText(text).width;
 
-                const x = textWidth < this.radius ? (this.radius - textWidth + 28) / 2 : 28;
+                const x = textWidth < this.radius ? (this.radius - textWidth + 160) / 2 : 28;
+                // console.log(x)
                 ctx.fillText(text, x, 0);
 
                 ctx.closePath();
@@ -417,6 +429,7 @@
             }
 
             this.lastSelected = selected;
+            this.selectedHistory.push(this.list[selected]);
 
             this.onStop(this.list[selected]);
         }
